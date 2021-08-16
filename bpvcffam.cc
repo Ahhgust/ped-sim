@@ -5,6 +5,7 @@
 #include <random>
 #include <algorithm>
 #include <stdio.h>
+#include <iostream>
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
@@ -205,6 +206,7 @@ int printVCF(vector<SimDetails> &simDetails, Person *****theSamples,
   }
 }
 
+
 // Given the simulated break points for individuals in each pedigree/family
 // stored in <theSamples> and other necessary information, reads input VCF
 // format data from the file named <inVCFfile> and prints the simulated
@@ -245,8 +247,18 @@ int makeVCF(vector<SimDetails> &simDetails, Person *****theSamples,
   // male heterozygote. To avoid these issues, we use a different random
   // generator for the het male choice, and we define the generator now before
   // any further random numbers are generated
+  
   mt19937 hetMaleXRandGen( randomGen );
 
+  // only used if coverage>=0
+  std::poisson_distribution<int> readdepth(max(CmdLineOpts::coverage, 0.) ); // coverage -> number of reads at a site
+  std::binomial_distribution<int> hetsim; // number of reads -> number of reads from mom (but not dad)
+  std::default_random_engine generator (CmdLineOpts::randSeed);
+  std::uniform_real_distribution<double> unituni(0.0,1.0);
+  
+  int nreads, nmat, npat;
+  double ran, probError = pow(10, CmdLineOpts::quality/-10.0);
+  
   // technically tab and newline; we want the latter so that the last sample id
   // on the header line doesn't include the newline character in it
   const char *tab = "\t\n";
@@ -302,10 +314,10 @@ int makeVCF(vector<SimDetails> &simDetails, Person *****theSamples,
       // header line with sample ids
       
       if (readMeta) {
-	fprintf(stderr, "\n");
-	fprintf(stderr, "ERROR: multiple copies of line giving sample ids: please remove all headers\n");
-	fprintf(stderr, "       not at the beginning of the input VCF\n");
-	exit(2);
+        fprintf(stderr, "\n");
+        fprintf(stderr, "ERROR: multiple copies of line giving sample ids: please remove all headers\n");
+        fprintf(stderr, "       not at the beginning of the input VCF\n");
+        exit(2);
       }
       readMeta = true;
 
@@ -314,7 +326,7 @@ int makeVCF(vector<SimDetails> &simDetails, Person *****theSamples,
       // these fields aren't important: aren't stored
       strtok_r(in.buf, tab, &saveptr);
       for(int i = 1; i < 9; i++)
-	strtok_r(NULL, tab, &saveptr);
+        strtok_r(NULL, tab, &saveptr);
 
       // now parse / store the sample ids and get randomized haplotypes in a way
       // that respects the sex of the input samples when necessary
@@ -325,132 +337,138 @@ int makeVCF(vector<SimDetails> &simDetails, Person *****theSamples,
       numInputSamples = sampleIds.size();
       hapAlleles = new char*[numInputSamples * 2]; // 2 for diploid samples
       if (hapAlleles == NULL) {
-	fprintf(stderr, "ERROR: out of memory");
-	exit(5);
+        fprintf(stderr, "ERROR: out of memory");
+        exit(5);
       }
 
       // Do math and store sample ids for --retain_extra:
       unsigned int numExtraSamples = numInputSamples - totalFounderHaps / 2;
       bool cantRetainEnough = false;
       if (CmdLineOpts::retainExtra < 0) {
-	numToRetain = numExtraSamples;
+        numToRetain = numExtraSamples;
       }
       else {
-	numToRetain = CmdLineOpts::retainExtra;
-	if (numToRetain > numExtraSamples) {
-	  cantRetainEnough = true;
-	  numToRetain = numExtraSamples;
-	}
+        numToRetain = CmdLineOpts::retainExtra;
+        if (numToRetain > numExtraSamples) {
+          cantRetainEnough = true;
+          numToRetain = numExtraSamples;
+        }
       }
 
       // Store ids for all extra samples -- those whose shuffled haplotype
       // assignment is after all that will be used:
       for(int i = 0; i < numInputSamples; i++) {
-	if (shuffHaps[i] < totalFounderHaps)
-	  founderSamples[ shuffHaps[i] / 2 ] = i;
-	else
-	  extraSamples.push_back(i);
+        if (shuffHaps[i] < totalFounderHaps)
+          founderSamples[ shuffHaps[i] / 2 ] = i;
+        else
+          extraSamples.push_back(i);
       }
       assert(extraSamples.size() == numExtraSamples);
 
       // want to randomize which samples get included, though this is only
       // relevant if we have more samples than are requested to be retained:
       if (numToRetain < numExtraSamples) {
-	// will print the first <numToRetain> from this list (random subset)
-	shuffle(extraSamples.begin(), extraSamples.end(), randomGen);
+        // will print the first <numToRetain> from this list (random subset)
+        shuffle(extraSamples.begin(), extraSamples.end(), randomGen);
       }
 
       // open output ids file (if needed):
       FILE *idOut = NULL;
       if (CmdLineOpts::printFounderIds) {
-	sprintf(outFileBuf, "%s.ids", CmdLineOpts::outPrefix);
-	idOut = fopen(outFileBuf, "w");
-	if (!idOut) {
-	  fprintf(stderr, "ERROR: could not open found ids file %s!\n",
-		  outFileBuf);
-	  perror("open");
-	  exit(1);
-	}
+        sprintf(outFileBuf, "%s.ids", CmdLineOpts::outPrefix);
+        idOut = fopen(outFileBuf, "w");
+        if (!idOut) {
+          fprintf(stderr, "ERROR: could not open found ids file %s!\n",
+                  outFileBuf);
+          perror("open");
+          exit(1);
+        }
       }
 
       for(int o = 0; o < 2; o++) {
-	fprintf(outs[o], "done.\n"); // initial scan of VCF file (see main())
-	fprintf(outs[o], "  Input contains %d samples, using %d as founders, and retaining %d\n",
-		numInputSamples, totalFounderHaps / 2, numToRetain);
-	if (cantRetainEnough) {
-	  fprintf(outs[o], "  Note: cannot retain all requested %d samples\n",
-		  CmdLineOpts::retainExtra);
-	}
-	if (idOut) {
-	  fprintf(outs[o], "Generating founder ids file... ");
-	  fflush(outs[o]);
-	}
+        fprintf(outs[o], "done.\n"); // initial scan of VCF file (see main())
+        fprintf(outs[o], "  Input contains %d samples, using %d as founders, and retaining %d\n",
+                numInputSamples, totalFounderHaps / 2, numToRetain);
+        if (cantRetainEnough) {
+          fprintf(outs[o], "  Note: cannot retain all requested %d samples\n",
+                  CmdLineOpts::retainExtra);
+        }
+        if (idOut) {
+          fprintf(outs[o], "Generating founder ids file... ");
+          fflush(outs[o]);
+        }
       }
-
+      if (CmdLineOpts::coverage >= 0.0) {
+        // can safely do this as all genotype-level descriptions are omitted.
+        out.printf("##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Number of high-quality bases\">\n");
+        out.printf("##FORMAT=<ID=PL,Number=G,Type=Integer,Description=\"List of Phred-scaled genotype likelihoods\">\n");
+        out.printf("##FORMAT=<ID=OG,Number=1,Type=String,Description=\"The correct (and optionally phased) genotype\">\n");
+      }
+      
       // Now print the header line indicating fields and sample ids for the
       // output VCF
       out.printf("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT");
 
       // print sample ids:
       for(unsigned int ped = 0; ped < simDetails.size(); ped++) {
-	int numFam = simDetails[ped].numFam;
-	int numGen = simDetails[ped].numGen;
-	int **numSampsToPrint = simDetails[ped].numSampsToPrint;
-	int *numBranches = simDetails[ped].numBranches;
-	Parent **branchParents = simDetails[ped].branchParents;
-	int **branchNumSpouses = simDetails[ped].branchNumSpouses;
+        int numFam = simDetails[ped].numFam;
+        int numGen = simDetails[ped].numGen;
+        int **numSampsToPrint = simDetails[ped].numSampsToPrint;
+        int *numBranches = simDetails[ped].numBranches;
+        Parent **branchParents = simDetails[ped].branchParents;
+        int **branchNumSpouses = simDetails[ped].branchNumSpouses;
+        
+        for(int fam = 0; fam < numFam; fam++)
+          for(int gen = 0; gen < numGen; gen++)
+            for(int branch = 0; branch < numBranches[gen]; branch++)
+              if (numSampsToPrint[gen][branch] > 0 || idOut) { // need to print?
+                int numNonFounders, numFounders;
+                getPersonCounts(gen, numGen, branch, numSampsToPrint,
+                                branchParents, branchNumSpouses, numFounders,
+                                numNonFounders);
+                int numPersons = numNonFounders + numFounders;
+                for(int ind = 0; ind < numPersons; ind++) {
+                  if (numSampsToPrint[gen][branch] > 0)
+                    out.printf("\t");
+                  bool curIsFounder = printSampleId(NULL, simDetails[ped],
+                                                    fam, gen, branch, ind,
+                                                    /*printAllGens=*/ false,
+                                                    /*gzOut=*/ &out);
+                  if (idOut && curIsFounder) {
+                    // print Ped-sim id to founder id file:
+                    printSampleId(idOut, simDetails[ped], fam, gen, branch,ind);
 
-	for(int fam = 0; fam < numFam; fam++)
-	  for(int gen = 0; gen < numGen; gen++)
-	    for(int branch = 0; branch < numBranches[gen]; branch++)
-	      if (numSampsToPrint[gen][branch] > 0 || idOut) { // need to print?
-		int numNonFounders, numFounders;
-		getPersonCounts(gen, numGen, branch, numSampsToPrint,
-				branchParents, branchNumSpouses, numFounders,
-				numNonFounders);
-		int numPersons = numNonFounders + numFounders;
-		for(int ind = 0; ind < numPersons; ind++) {
-		  if (numSampsToPrint[gen][branch] > 0)
-		    out.printf("\t");
-		  bool curIsFounder = printSampleId(NULL, simDetails[ped],
-						    fam, gen, branch, ind,
-						    /*printAllGens=*/ false,
-						    /*gzOut=*/ &out);
-		  if (idOut && curIsFounder) {
-		    // print Ped-sim id to founder id file:
-		    printSampleId(idOut, simDetails[ped], fam, gen, branch,ind);
-
-		    // since males on the X chromosome only have a defined
-		    // haplotype for haps index 1, we use that index
-		    int hapNum = theSamples[ped][fam][gen][branch][ind].
-				      haps[1][/*chrIdx=*/0].front().foundHapNum;
-		    hapNum--; // hap index 1 is an odd number, so we decrement
-		    assert(hapNum % 2 == 0);
-		    int founderIdx = founderSamples[ hapNum / 2 ];
-		    fprintf(idOut, "\t%s\n", sampleIds[ founderIdx ]);
-		  }
-
-		}
-	      }
+                    // since males on the X chromosome only have a defined
+                    // haplotype for haps index 1, we use that index
+                    int hapNum = theSamples[ped][fam][gen][branch][ind].
+                      haps[1][/*chrIdx=*/0].front().foundHapNum;
+                    hapNum--; // hap index 1 is an odd number, so we decrement
+                    assert(hapNum % 2 == 0);
+                    int founderIdx = founderSamples[ hapNum / 2 ];
+                    fprintf(idOut, "\t%s\n", sampleIds[ founderIdx ]);
+                  }
+                  
+                }
+              }
       }
 
       // print the ids for the --retain_extra samples:
       for(unsigned int i = 0; i < numToRetain; i++) {
-	int sampIdx = extraSamples[i];
-	out.printf("\t%s", sampleIds[ sampIdx ]);
+        int sampIdx = extraSamples[i];
+        out.printf("\t%s", sampleIds[ sampIdx ]);
       }
 
       out.printf("\n");
 
       for(int o = 0; o < 2; o++) {
-	if (idOut)
-	  fprintf(outs[o], "done.\n");
-	fprintf(outs[o], "Generating VCF file... ");
-	fflush(outs[o]);
+        if (idOut)
+          fprintf(outs[o], "done.\n");
+        fprintf(outs[o], "Generating VCF file... ");
+        fflush(outs[o]);
       }
 
       if (idOut)
-	fclose(idOut);
+        fclose(idOut);
 
       continue;
     }
@@ -460,17 +478,17 @@ int makeVCF(vector<SimDetails> &simDetails, Person *****theSamples,
 
     if (strcmp(chrom, chrName) != 0) {
       if (gotSomeData) {
-	chrIdx++;
-	if (chrIdx == map.size())
-	  // no more chromosomes to process; will ignore remainder of VCF
-	  break;
-	chrName = map.chromName(chrIdx);
+        chrIdx++;
+        if (chrIdx == map.size())
+          // no more chromosomes to process; will ignore remainder of VCF
+          break;
+        chrName = map.chromName(chrIdx);
       }
       if (!gotSomeData || strcmp(chrom, chrName) != 0) {
-	fprintf(stderr, "\nERROR: chromosome %s in VCF file either out of order or not present\n",
-		chrom);
-	fprintf(stderr, "       in genetic map\n");
-	exit(5);
+        fprintf(stderr, "\nERROR: chromosome %s in VCF file either out of order or not present\n",
+                chrom);
+        fprintf(stderr, "       in genetic map\n");
+        exit(5);
       }
 
       // update beginning / end positions for this chromosome
@@ -504,7 +522,7 @@ int makeVCF(vector<SimDetails> &simDetails, Person *****theSamples,
     }
     if (formatCurField == NULL) {
       fprintf(stderr, "ERROR: in VCF: no GT field at CHROM %s, POS %s\n",
-	      chrom, posStr);
+              chrom, posStr);
       exit(6);
     }
 
@@ -515,14 +533,14 @@ int makeVCF(vector<SimDetails> &simDetails, Person *****theSamples,
     int numAlleles = 2;
     for(int i = 0; altField[i] != '\0'; i++) {
       if (altField[i] == ',')
-	numAlleles++;
+        numAlleles++;
     }
     if (numAlleles > 2 && CmdLineOpts::genoErrRate > 0.0 &&
 						      !alleleCountWarnPrinted) {
       alleleCountWarnPrinted = true;
       for(int o = 0; o < 2; o++) {
-	fprintf(outs[o], "\nWARNING: genotyping error only implemented for markers with 2 alleles\n");
-	fprintf(outs[o], "         will not introduce errors at any markers with >2 alleles\n");
+        fprintf(outs[o], "\nWARNING: genotyping error only implemented for markers with 2 alleles\n");
+        fprintf(outs[o], "         will not introduce errors at any markers with >2 alleles\n");
       }
     }
 
@@ -536,68 +554,68 @@ int makeVCF(vector<SimDetails> &simDetails, Person *****theSamples,
       char *saveptrGT;
       char *theGT = strtok_r(sampStr, ":", &saveptrGT);
       for(int tokenIndex = 0; tokenIndex < gtField; tokenIndex++)
-	theGT = strtok_r(NULL, ":", &saveptrGT);
-
+        theGT = strtok_r(NULL, ":", &saveptrGT);
+      
       for(int c = 0; theGT[c] != '\0'; c++) {
-	if (theGT[c] == '/') {
-	  fprintf(stderr, "\n\nERROR: detected unphased genotype; input VCF must be phased.\n");
-	  fprintf(stderr, "       Prematurely truncating output VCF.\n");
-	  fprintf(stderr, "       See variant on chromosome/contig %s, position %d\n",
-		  chrom, pos);
-	  out.close();
-	  in.close();
-	  return 1;
-	}
+        if (theGT[c] == '/') {
+          fprintf(stderr, "\n\nERROR: detected unphased genotype; input VCF must be phased.\n");
+          fprintf(stderr, "       Prematurely truncating output VCF.\n");
+          fprintf(stderr, "       See variant on chromosome/contig %s, position %d\n",
+                  chrom, pos);
+          out.close();
+          in.close();
+          return 1;
+        }
       }
-
+      
       // Now break apart the genotype into the alleles of the two haplotypes
       char *alleles[2];
       char *saveptrAlleles;
       alleles[0] = strtok_r(theGT, bar, &saveptrAlleles);
       alleles[1] = strtok_r(NULL, bar, &saveptrAlleles);
-
+      
       if (map.isX(chrIdx) && sampleSexes[inputIndex] == 0) {
-	if (alleles[1] == NULL) {
-	  alleles[1] = alleles[0];
-	}
-	else if (strcmp(alleles[0], alleles[1]) != 0) {
-	  if (!warnedHetMaleX) {
-	    for(int o = 0; o < 2; o++)
-	      fprintf(outs[o], "\nWARNING: heterozygous male X genotype found; will randomly pick an allele\n");
-	    warnedHetMaleX = true;
-	  }
-	  int keepHap = coinFlip(hetMaleXRandGen);
-	  alleles[ 1 ^ keepHap ] = alleles[keepHap];
-	}
+        if (alleles[1] == NULL) {
+          alleles[1] = alleles[0];
+        }
+        else if (strcmp(alleles[0], alleles[1]) != 0) {
+          if (!warnedHetMaleX) {
+            for(int o = 0; o < 2; o++)
+              fprintf(outs[o], "\nWARNING: heterozygous male X genotype found; will randomly pick an allele\n");
+            warnedHetMaleX = true;
+          }
+          int keepHap = coinFlip(hetMaleXRandGen);
+          alleles[ 1 ^ keepHap ] = alleles[keepHap];
+        }
       }
 
       // error check:
       if (alleles[1] == NULL) {
-	fprintf(stderr, "ERROR: VCF contains genotype %s, which is not phased or contains one haplotype\n",
-		theGT);
-	fprintf(stderr, "       this is only allowed for males (input with --sexes) on the X chromosome\n");
-	exit(5);
+        fprintf(stderr, "ERROR: VCF contains genotype %s, which is not phased or contains one haplotype\n",
+                theGT);
+        fprintf(stderr, "       this is only allowed for males (input with --sexes) on the X chromosome\n");
+        exit(5);
       }
       if (strtok_r(NULL, bar, &saveptrAlleles) != NULL) {
-	fprintf(stderr, "ERROR: multiple '|' characters in data field\n");
-	exit(5);
+        fprintf(stderr, "ERROR: multiple '|' characters in data field\n");
+        exit(5);
       }
 
       for(int h = 0; h < 2; h++) {
-	if (alleles[h][0] == '.') {
-	  fprintf(stderr, "\nERROR: simulator currently requires all positions to be non-missing\n");
-	  fprintf(stderr, "         see variant on chromosome/contig %s, position %d\n",
-		  chrom, pos);
-	  exit(5);
-	}
-	hapAlleles[numStored++] = alleles[h];
+        if (alleles[h][0] == '.') {
+          fprintf(stderr, "\nERROR: simulator currently requires all positions to be non-missing\n");
+          fprintf(stderr, "         see variant on chromosome/contig %s, position %d\n",
+                  chrom, pos);
+          exit(5);
+        }
+        hapAlleles[numStored++] = alleles[h];
       }
 
       int founderIndex = shuffHaps[ inputIndex ];
       inputIndex++;
       if (founderIndex < totalFounderHaps) {
-	for(int h = 0; h < 2; h++)
-	  founderHaps[founderIndex + h] = alleles[h];
+        for(int h = 0; h < 2; h++)
+          founderHaps[founderIndex + h] = alleles[h];
       }
 
     }
@@ -615,7 +633,9 @@ int makeVCF(vector<SimDetails> &simDetails, Person *****theSamples,
     for(int i = 0; i < 6; i++)
       out.printf("\t%s", otherFields[i]);
     out.printf("\tGT");
-
+    if (CmdLineOpts::coverage >= 0.0 && numAlleles==2)
+      out.printf(":DP:PL:OG");
+    
     for(unsigned int ped = 0; ped < simDetails.size(); ped++) {
       int numFam = simDetails[ped].numFam;
       int numGen = simDetails[ped].numGen;
@@ -625,109 +645,261 @@ int makeVCF(vector<SimDetails> &simDetails, Person *****theSamples,
       int **branchNumSpouses = simDetails[ped].branchNumSpouses;
 
       for(int fam = 0; fam < numFam; fam++)
-	for(int gen = 0; gen < numGen; gen++)
-	  for(int branch = 0; branch < numBranches[gen]; branch++)
-	    if (numSampsToPrint[gen][branch] > 0) {
-	      int numNonFounders, numFounders;
-	      getPersonCounts(gen, numGen, branch, numSampsToPrint,
-			      branchParents, branchNumSpouses, numFounders,
-			      numNonFounders);
-	      int numPersons = numNonFounders + numFounders;
-
+        for(int gen = 0; gen < numGen; gen++)
+          for(int branch = 0; branch < numBranches[gen]; branch++)
+            if (numSampsToPrint[gen][branch] > 0) {
+              int numNonFounders, numFounders;
+              getPersonCounts(gen, numGen, branch, numSampsToPrint,
+                              branchParents, branchNumSpouses, numFounders,
+                              numNonFounders);
+              int numPersons = numNonFounders + numFounders;
+              
 	      for(int ind = 0; ind < numPersons; ind++) {
-		int numHaps = 2;
-		bool maleX = false;
-		if (map.isX(chrIdx) &&
-		    theSamples[ped][fam][gen][branch][ind].sex == 0) {
-		  maleX = true;
-		  // male X: haploid output per VCF spec
-		  numHaps = 1;
-		}
 
-		// set to missing (according to the rate set by the user)?
-		if (setMissing( randomGen )) {
-		  for(int h = 0; h < numHaps; h++)
-		    out.printf("%c.", betweenAlleles[h]);
-		  continue; // done printing genotype data for this sample
-		}
 
-		// non-missing genotype: print, possibly with a genotyping error
+          
+          int numHaps = 2;
+          bool maleX = false;
+          if (map.isX(chrIdx) &&
+              theSamples[ped][fam][gen][branch][ind].sex == 0) {
+            maleX = true;
+            // male X: haploid output per VCF spec
+            numHaps = 1;
+          }
+          
+          // set to missing (according to the rate set by the user)?
+          if (setMissing( randomGen )) {
+            for(int h = 0; h < numHaps; h++)
+              out.printf("%c.", betweenAlleles[h]);
+            continue; // done printing genotype data for this sample
+          }
 
-		// get founder haps for the current sample
-		uint32_t curFounderHaps[2];
-		for(int h = 0; h < 2; h++) {
-		  if (maleX && h == 0) {
+          // non-missing genotype: print, possibly with a genotyping error
+          
+          // get founder haps for the current sample
+          uint32_t curFounderHaps[2];
+          for(int h = 0; h < 2; h++) {
+            if (maleX && h == 0) {
 		    // only h == 1 valid for males on chrX
-		    curFounderHaps[h] = (uint32_t) -1; // placeholder: fix below
-		    continue;
-		  }
+              curFounderHaps[h] = (uint32_t) -1; // placeholder: fix below
+              continue;
+            }
+            
+            Haplotype &curHap = theSamples[ped][fam][gen][branch][ind].
+              haps[h][chrIdx];
+            while (curHap.front().endPos < pos) {
+              pop_front(curHap);
+            }
+            assert(curHap.front().endPos >= pos);
+            curFounderHaps[h] = curHap.front().foundHapNum;
+          }
+          if (maleX)
+            curFounderHaps[0] = curFounderHaps[1];
+          
+          // make this a pseudo haploid genotype?
+          if (CmdLineOpts::pseudoHapRate > 0) {
+            if (isPseudoHap( randomGen )) {
+              // pseudo-haploid; pick one haplotype to print
+              int printHap = coinFlip(randomGen);
+              for(int h = 0; h < numHaps; h++)
+                out.printf("%c%s", betweenAlleles[h],
+                           founderHaps[ curFounderHaps[printHap] ]);
+            }
+            else { // not pseudo-haploid => both alleles missing:
+              for(int h = 0; h < numHaps; h++)
+                out.printf("%c.", betweenAlleles[h]);
+            }
+            continue;
+          }
 
-		  Haplotype &curHap = theSamples[ped][fam][gen][branch][ind].
-								haps[h][chrIdx];
-		  while (curHap.front().endPos < pos) {
-		    pop_front(curHap);
-		  }
-		  assert(curHap.front().endPos >= pos);
-		  curFounderHaps[h] = curHap.front().foundHapNum;
-		}
-		if (maleX)
-		  curFounderHaps[0] = curFounderHaps[1];
+          // added by Ahhgust; if coverage>=0, it dictates "error"
+          // (and trumps other command line arguments wrt error)
+          if (CmdLineOpts::coverage >= 0.0 && numAlleles==2) {
+            nreads = readdepth(generator) ;
 
-		// make this a pseudo haploid genotype?
-		if (CmdLineOpts::pseudoHapRate > 0) {
-		  if (isPseudoHap( randomGen )) {
-		    // pseudo-haploid; pick one haplotype to print
-		    int printHap = coinFlip(randomGen);
-		    for(int h = 0; h < numHaps; h++)
-		      out.printf("%c%s", betweenAlleles[h],
-				 founderHaps[ curFounderHaps[printHap] ]);
-		  }
-		  else { // not pseudo-haploid => both alleles missing:
-		    for(int h = 0; h < numHaps; h++)
-		      out.printf("%c.", betweenAlleles[h]);
-		  }
-		  continue;
-		}
+            if (!nreads) { // no reads == missing data
+              if (numHaps==2)
+                out.printf("\t./."); // should always be / (not |)
+              else // honestly unsure if this is the right format for haploid missing data. Intuitive, yes, correct...? maybe?
+                out.printf("\t.");
+              
+              
+            } else {
+              int alleles[2]; // integer allele values
+              int readcounts[] = {0,0}; // number of 0s, 1s in truth
+              int readsObserved[] = {0,0,0,0}; // number of 0s, 1s, and 2s and 3s (two bases not 0 or 1) observed (incorporating error)
+              for(int h = 0; h < numHaps; h++)
+                alleles[h] = founderHaps[ curFounderHaps[h] ][0] - '0';
 
-		// genotyping error?
-		if (genoErr( randomGen ) && numAlleles == 2) {
-		  int alleles[2]; // integer allele values
-		  for(int h = 0; h < numHaps; h++)
-		    // can get character 0 from founderHaps strings: with only
-		    // two alleles possible, these strings must have length 1.
-		    // converting to an integer is simple: subtract '0'
-		    alleles[h] = founderHaps[ curFounderHaps[h] ][0] - '0';
+              // first get the number of reads for the relevant basecalls (assuming no sequencing error; neglecting phreds)
+              if (alleles[0] != alleles[1]) {
+                nmat = hetsim(generator, std::binomial_distribution<>::param_type( nreads, 0.5 ));  // treated as first in pair 
+                npat = nreads - nmat; // and second in pair
 
-		  if (alleles[0] != alleles[1]) {
-		    // heterozygous: choose an allele to alter
-		    int alleleToFlip = coinFlip(randomGen);
-		    alleles[ alleleToFlip ] ^= 1;
-		  }
-		  else {
-		    // homozygous: determine whether to change to the opposite
-		    // homozygote or to a heterozygote
-		    if (homErr(randomGen)) {
-		      alleles[0] ^= 1;
-		      alleles[1] ^= 1;
-		    }
-		    else {
+                readcounts[ alleles[0] ] += nmat;
+                readcounts[ alleles[1] ] += npat;
+                
+              } else {
+                readcounts[ alleles[0] ] += nreads;
+              }
+
+              //todo: 0/1 can really just be arbitrary. (no assumptions on biallelic sites is necessary. the individual is at most biallelic)
+              for (int x = 0; x < readcounts[0]; ++x) { // errors for the reference base
+                ran = unituni(generator);
+                if ( ran/3.0 < probError) { // 3 ways for error 0->1, 0->2 0-> 3. 
+                  ++readsObserved[3];
+                } else if ( (ran+ran)/3.0 < probError) { 
+                  ++readsObserved[2];
+                } else if (ran < probError) {
+                  ++readsObserved[1];
+                } else {
+                  ++readsObserved[0];
+                }
+              }
+              
+              for (int x = 0; x < readcounts[1]; ++x) { // errors for the alternative base
+                ran = unituni(generator);
+                if ( ran/3.0 < probError) { // 3 ways for error 1->0, 1->2 1-> 3.
+                  ++readsObserved[3];
+                } else if ( (ran+ran)/3.0 < probError) { 
+                  ++readsObserved[2];
+                } else if (ran < probError) {
+                  ++readsObserved[0]; // note the difference from the same code-block above
+                } else {
+                  ++readsObserved[1];
+                }
+              }
+             
+              double loglikes[] = {0.0, 0.0, 0.0}; // genotype likelihood computation taken from GATK (dragon). See
+              // http://www.popgen.dk/angsd/index.php/Genotype_Likelihoods
+              // as with the alternative way of specifying errors, only errors within the domain (00, 01 OR 10, 11) genotypes
+
+              // produces: 00, 01, 11; possible sample genotypes
+              for (int i =0; i < 3; ++i) {
+                  // compute the likelihood for all reads of type 0
+                int a1, a2;
+                a1 = a2 = 0;
+                if (i==1)
+                  a2 = 1;
+                else if (i == 2)
+                  a1 = a2 = 1;
+
+                // consider all of the bases of type reference
+                if (readsObserved[0]) {
+                  double like1read;
+                  if (a1==0) { //(Pr(b|A1)
+                    like1read = 1.0-probError;
+                  } else {
+                    like1read = probError;
+                  }
+                  
+                  if (a2==0) { //(Pr(b|A2)
+                    like1read += 1.0-probError;
+                  } else {
+                    like1read += probError;
+                  }
+                    like1read /= 2.0; // *1/2( Pr(b|A1) + Pr(b|A2) )
+                    
+                    loglikes[i] += log10(like1read) * readsObserved[0];
+                }
+
+                // and of type alternative
+                if (readsObserved[1]) {
+                  double like1read;
+                  if (a1==1) { //(Pr(b|A1)
+                    like1read = 1.0-probError;
+                  } else {
+                    like1read = probError;
+                  }
+                  
+                  if (a2==1) { //(Pr(b|A2)
+                    like1read += 1.0-probError;
+                  } else {
+                    like1read += probError;
+                  }
+                  like1read /= 2.0; // *1/2( Pr(b|A1) + Pr(b|A2) )
+                    
+                  loglikes[i] += log10(like1read) * readsObserved[1];
+                }
+
+              }
+
+              double max=loglikes[0];
+              int argmax= 0;
+              for (int i = 1; i < 3; ++i) {
+                if (loglikes[i] >= max) {
+                  max = loglikes[i];
+                  argmax=i;
+                }
+              }
+              
+              //printf("\n%d: %d|%d -> %d %d\n", nreads, alleles[0], alleles[1], readsObserved[0], readsObserved[1]);
+              
+              max *= -10; // convert the log-likelihood to the PL
+              int pls[3]; // for the PL field. Phred-scaled relative likelihoods
+              for (int i =0; i < 3; ++i) {
+                pls[i] = round( -10*loglikes[i] - max);
+                //printf("%f %d\n", loglikes[i], pls[i]);
+              }
+              
+              //printf("%d %d : %f %f %f\n", readsObserved[0], readsObserved[1],
+              //     exp(loglikes[0]), exp(loglikes[1]), exp(loglikes[2]));
+              // TODO: x chromosome (likelihood function changes!!)
+              // take MLE
+              // report the right fields.
+              // augment to report not just the genotypes. (to do this, print out the other fields
+
+              char calledAllele[4] = {'0', '/', '0', 0};
+              if (argmax>0)
+                calledAllele[2] = '1';
+              if (argmax==2)
+                calledAllele[0] = '1';
+
+              out.printf("\t%s:%d:%d,%d,%d:%d|%d", calledAllele, nreads, pls[0], pls[1], pls[2], alleles[0], alleles[1]);
+              
+              //              for(int h = 1; h < numHaps; h++)
+              //out.printf("%c%d", betweenAlleles[h],alleles[h]);
+            }
+
+          } // genotyping error? (Ahhgust: Originally was an if; no preceding if)
+          else if (genoErr( randomGen ) && numAlleles == 2) {
+            int alleles[2]; // integer allele values
+            for(int h = 0; h < numHaps; h++)
+              // can get character 0 from founderHaps strings: with only
+              // two alleles possible, these strings must have length 1.
+              // converting to an integer is simple: subtract '0'
+              alleles[h] = founderHaps[ curFounderHaps[h] ][0] - '0';
+            
+            if (alleles[0] != alleles[1]) {
+              // heterozygous: choose an allele to alter
+              int alleleToFlip = coinFlip(randomGen);
+              alleles[ alleleToFlip ] ^= 1;
+            }
+            else {
+              // homozygous: determine whether to change to the opposite
+              // homozygote or to a heterozygote
+              if (homErr(randomGen)) {
+                alleles[0] ^= 1;
+                alleles[1] ^= 1;
+              }
+              else {
 		      // will flip only one allele so that the sample becomes
 		      // heterozygous; randomly choose which
-		      int alleleToFlip = coinFlip(randomGen);
-		      alleles[ alleleToFlip ] ^= 1;
-		      if (maleX) // ensure male homozygous on X
-			alleles[ 1^alleleToFlip ] ^= 1;
-		    }
-		  }
-
-		  for(int h = 0; h < numHaps; h++)
-		    out.printf("%c%d", betweenAlleles[h],alleles[h]);
-		}
-		else { // no error: print alleles from original haplotypes
-		  for(int h = 0; h < numHaps; h++)
-		    out.printf("%c%s", betweenAlleles[h],
-			       founderHaps[ curFounderHaps[h] ]);
-		}
+                int alleleToFlip = coinFlip(randomGen);
+                alleles[ alleleToFlip ] ^= 1;
+                if (maleX) // ensure male homozygous on X
+                  alleles[ 1^alleleToFlip ] ^= 1;
+              }
+            }
+            
+            for(int h = 0; h < numHaps; h++)
+              out.printf("%c%d", betweenAlleles[h],alleles[h]);
+          }
+          else { // no error: print alleles from original haplotypes
+            for(int h = 0; h < numHaps; h++)
+              out.printf("%c%s", betweenAlleles[h],
+                         founderHaps[ curFounderHaps[h] ]);
+          }
 	      }
 	    }
     }
@@ -736,12 +908,12 @@ int makeVCF(vector<SimDetails> &simDetails, Person *****theSamples,
       int sampIdx = extraSamples[i];
       int numHaps = 2;
       if (map.isX(chrIdx) && sampleSexes[sampIdx] == 0)
-	// male X: haploid output per VCF spec
-	numHaps = 1;
+        // male X: haploid output per VCF spec
+        numHaps = 1;
       for(int h = 0; h < numHaps; h++)
-	out.printf("%c%s", betweenAlleles[h], hapAlleles[ 2*sampIdx + h ]);
+        out.printf("%c%s", betweenAlleles[h], hapAlleles[ 2*sampIdx + h ]);
     }
-
+    
     out.printf("\n");
   }
 

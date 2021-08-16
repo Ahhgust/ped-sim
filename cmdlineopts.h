@@ -7,8 +7,8 @@
 #ifndef CMDLINEOPTS_H
 #define CMDLINEOPTS_H
 
-#define VERSION_NUMBER	"1.3.1"
-#define RELEASE_DATE	" 4 May 2021"
+#define VERSION_NUMBER	"1.3.2"
+#define RELEASE_DATE	" 5 August 2021"
 
 class CmdLineOpts {
   public:
@@ -69,6 +69,13 @@ class CmdLineOpts {
 
     // Rate of pseudo-haploid-ity. Mutually exclusive with missRate
     static double pseudoHapRate;
+
+    // for modelling error in low coverage genomes
+    // error is a tuple: some number of reads each with a constant quality
+    // when coverage >0, this flag trumps
+    // (mutually exclusive with genoErrRate/homErrRate/missRate/pseudoHapRate
+    static double coverage;
+    static double quality;
     
     // Keep phase information in output VCF?
     static int keepPhase;

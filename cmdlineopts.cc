@@ -27,6 +27,8 @@ double CmdLineOpts::genoErrRate = 1e-3;
 double CmdLineOpts::homErrRate = 0;
 double CmdLineOpts::missRate = 1e-3;
 double CmdLineOpts::pseudoHapRate = 0.0;
+double CmdLineOpts::coverage = -1.0; // Added by Ahhgust: for low coverage genomes, model error in a low-template setting (Poisson distribution of reads)
+double CmdLineOpts::quality = 30.0; // Added by Ahhgust: (cont) where each read has the given quality value (can be made arbitrarily complex...)
 int    CmdLineOpts::keepPhase = 0;
 int    CmdLineOpts::retainExtra = 0;
 int    CmdLineOpts::printFounderIds = 0;
@@ -46,6 +48,8 @@ bool CmdLineOpts::parseCmdLineOptions(int argc, char **argv) {
     PSEUDO_HAP_RATE,
     FIXED_CO,
     SEXES,
+    COVERAGE,
+    QUALITY,
   };
 
   // This is a local variable because whenever <interfereFile> is NULL, the
@@ -70,6 +74,8 @@ bool CmdLineOpts::parseCmdLineOptions(int argc, char **argv) {
     {"err_hom_rate", required_argument, NULL, ERR_HOM_RATE},
     {"miss_rate", required_argument, NULL, MISS_RATE},
     {"pseudo_hap", required_argument, NULL, PSEUDO_HAP_RATE},
+    {"coverage", required_argument, NULL, COVERAGE},
+    {"quality", required_argument, NULL, QUALITY},
 #ifndef NOFIXEDCO
     {"fixed_co", required_argument, NULL, FIXED_CO},
 #endif // NOFIXEDCO
@@ -190,11 +196,39 @@ bool CmdLineOpts::parseCmdLineOptions(int argc, char **argv) {
 	  exit(2);
 	}
 	if (pseudoHapRate < 0 || pseudoHapRate > 1) {
-	  fprintf(stderr, "ERROR: --miss_rate value must be between 0 and 1\n");
+	  fprintf(stderr, "ERROR: --pseudo_hap value must be between 0 and 1\n");
 	  exit(5);
 	}
 	break;
-      case RETAIN_EXTRA:
+    case COVERAGE:
+	coverage = strtod(optarg, &endptr);
+
+	if (errno != 0 || *endptr != '\0') {
+	  fprintf(stderr, "ERROR: unable to parse --coverage argument as floating point value\n");
+	  if (errno != 0)
+	    perror("strtod");
+	  exit(2);
+	}
+	if (coverage < 0) {
+	  fprintf(stderr, "ERROR: --coverage must be non-negative\n");
+	  exit(5);
+	}
+	break;
+    case QUALITY:
+	quality = strtod(optarg, &endptr);
+
+	if (errno != 0 || *endptr != '\0') {
+	  fprintf(stderr, "ERROR: unable to parse --quality argument as floating point value\n");
+	  if (errno != 0)
+	    perror("strtod");
+	  exit(2);
+	}
+	if (quality <= 0) {
+	  fprintf(stderr, "ERROR: --quality must be positive\n");
+	  exit(5);
+	}
+	break;
+    case RETAIN_EXTRA:
 	retainExtra = strtol(optarg, &endptr, 10);
 	if (errno != 0 || *endptr != '\0') {
 	  fprintf(stderr, "ERROR: unable to parse --retain_extra argument as integer\n");
@@ -223,13 +257,13 @@ bool CmdLineOpts::parseCmdLineOptions(int argc, char **argv) {
 	break;
 
       case '?':
-	// bad option; getopt_long already printed error message
+        // bad option; getopt_long already printed error message
         printUsage(stderr, argv[0]);
-	exit(1);
-	break;
+        exit(1);
+        break;
 
-      default:
-	exit(1);
+    default:
+        exit(1);
     }
   }
 
@@ -285,6 +319,7 @@ bool CmdLineOpts::parseCmdLineOptions(int argc, char **argv) {
     printUsage(stderr, argv[0]);
   }
 
+  
   return haveGoodArgs;
 }
 
@@ -333,6 +368,10 @@ void CmdLineOpts::printUsage(FILE *out, char *programName) {
   fprintf(out, "\t\t\t  genotyping error at the marker (default 0)\n");
   fprintf(out, "  --miss_rate <#>\tmissingness rate (default 1e-3; 0 disables)\n");
   fprintf(out, "  --pseudo_hap <#>\trate of pseudo-haploid sites; all other sites missing\n");
+  fprintf(out, "\n");
+  fprintf(out, "  --coverage <#>\tFor low-coverage genome simulation; the coverage assumed (poisson distribution of read-depths)\n");
+  fprintf(out, "\n");
+  fprintf(out, "  --quality <#> \tFor low-coverage genome simulation; the base-quality asssumed (single value)\n");
   fprintf(out, "\n");
   fprintf(out, "  --keep_phase\t\toutput VCF with phase information (defaults to unphased)\n");
   fprintf(out, "\n");

@@ -88,8 +88,12 @@ int main(int argc, char **argv) {
 	      CmdLineOpts::homErrRate);
       fprintf(outs[o], "  Missingness rate:\t%.1le\n",
 	      CmdLineOpts::missRate);
-      fprintf(outs[o], "  Pseudo-haploid rate:\t%.1lg\n\n",
+      fprintf(outs[o], "  Pseudo-haploid rate:\t%.1lg\n",
 	      CmdLineOpts::pseudoHapRate);
+      fprintf(outs[o], "  Simulated coverage:\t%.1f\n",
+              CmdLineOpts::coverage);
+      fprintf(outs[o], "  Simulated quality:\t%.1f\n\n",
+              CmdLineOpts::quality);
 
       if (CmdLineOpts::retainExtra < 0) {
 	fprintf(outs[o], "  Retaining all unused samples in output VCF\n");
