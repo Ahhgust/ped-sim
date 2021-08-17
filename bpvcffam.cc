@@ -798,9 +798,9 @@ int makeVCF(vector<SimDetails> &simDetails, Person *****theSamples,
                   } else {
                     like1read += probError;
                   }
-                    like1read /= 2.0; // *1/2( Pr(b|A1) + Pr(b|A2) )
-                    
-                    loglikes[i] += log10(like1read) * readsObserved[0];
+                  like1read /= 2.0; // *1/2( Pr(b|A1) + Pr(b|A2) )
+                  
+                  loglikes[i] += log10(like1read) * readsObserved[0];
                 }
 
                 // and of type alternative
@@ -857,8 +857,6 @@ int makeVCF(vector<SimDetails> &simDetails, Person *****theSamples,
 
               out.printf("\t%s:%d:%d,%d,%d:%d|%d", calledAllele, nreads, pls[0], pls[1], pls[2], alleles[0], alleles[1]);
               
-              //              for(int h = 1; h < numHaps; h++)
-              //out.printf("%c%d", betweenAlleles[h],alleles[h]);
             }
 
           } // genotyping error? (Ahhgust: Originally was an if; no preceding if)
@@ -910,8 +908,11 @@ int makeVCF(vector<SimDetails> &simDetails, Person *****theSamples,
       if (map.isX(chrIdx) && sampleSexes[sampIdx] == 0)
         // male X: haploid output per VCF spec
         numHaps = 1;
-      for(int h = 0; h < numHaps; h++)
+      for(int h = 0; h < numHaps; h++) {
         out.printf("%c%s", betweenAlleles[h], hapAlleles[ 2*sampIdx + h ]);
+        if (CmdLineOpts::coverage >= 0.0 && numAlleles==2) // print out missing data for the  annotations specific to simulated individuals...
+          out.printf(":.:.:.");    
+      }
     }
     
     out.printf("\n");
