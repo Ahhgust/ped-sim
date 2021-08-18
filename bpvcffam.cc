@@ -855,7 +855,18 @@ int makeVCF(vector<SimDetails> &simDetails, Person *****theSamples,
               if (argmax==2)
                 calledAllele[0] = '1';
 
-              out.printf("\t%s:%d:%d,%d,%d:%d|%d", calledAllele, nreads, pls[0], pls[1], pls[2], alleles[0], alleles[1]);
+              if (maleX) {
+                // bit of a kludge. For males on the X, just use the likelihoods for the homozygotes.
+                // as the PL tag is just a likelhood ratio (vs the most-likely genotype)
+                // hopefully the model is close enough.
+                
+                if (loglikes[0] > loglikes[2]) // MLE is homozygous ref; treat this as MLE in the haploid case as well
+                  out.printf("\t0:%d:%d,%d:%d", nreads, pls[0], pls[2], alleles[0]);
+                else  // ditto but for homozygous alt
+                  out.printf("\t1:%d:%d,%d:%d", nreads, pls[0], pls[2], alleles[0]);
+                
+              } else // common case (not male on the X). Note; DP field is for "high quality reads"... which we just define as all reads
+                out.printf("\t%s:%d:%d,%d,%d:%d|%d", calledAllele, nreads, pls[0], pls[1], pls[2], alleles[0], alleles[1]);
               
             }
 
