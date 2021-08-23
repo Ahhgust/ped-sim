@@ -633,6 +633,7 @@ int makeVCF(vector<SimDetails> &simDetails, Person *****theSamples,
     for(int i = 0; i < 6; i++)
       out.printf("\t%s", otherFields[i]);
     out.printf("\tGT");
+    
     if (CmdLineOpts::coverage >= 0.0 && numAlleles==2)
       out.printf(":DP:PL:OG");
     
@@ -717,11 +718,11 @@ int makeVCF(vector<SimDetails> &simDetails, Person *****theSamples,
           if (CmdLineOpts::coverage >= 0.0 && numAlleles==2) {
             nreads = readdepth(generator) ;
 
-            if (!nreads) { // no reads == missing data
+            if (!nreads) { // no reads == missing data. Add in the 
               if (numHaps==2)
-                out.printf("\t./."); // should always be / (not |)
+                out.printf("\t./.:0:0,0,0:%c|%c", founderHaps[ curFounderHaps[0] ][0], founderHaps[ curFounderHaps[1] ][0]);
               else // honestly unsure if this is the right format for haploid missing data. Intuitive, yes, correct...? maybe?
-                out.printf("\t.");
+                out.printf("\t.:0:0,0,0:%c|%c", founderHaps[ curFounderHaps[0] ][0], founderHaps[ curFounderHaps[1] ][0]);
               
               
             } else {
