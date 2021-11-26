@@ -3,6 +3,18 @@ Pedigree Simulator
 Program to simulate pedigree structures. The method can use sex-specific
 genetic maps and randomly assigns the sex of each parent (or uses user-specified
 sexes) when using such maps.
+<br>
+This is an unofficial fork!
+See the official version [here](https://github.com/williamslab/ped-sim)
+
+<br>
+In this fork a genomic error model is added. See flags:
+--coverage AND
+--quality
+
+The error model is solely concerned with the genotyping error
+that occurs because a sample is low coverage. In brief, a number of reads at a site
+is drawn from a Poisson distribution (--coverage) and a singular error rate (in Phred quality score units, --quality) is further assumed. The true genotype from the simulation, along w/ the number of reads and base qualities, is transformed into the observed genotype using the simplistic likelihood estimator of Angsd. The original genotype is maintained (added tag, OG) and the simulated observed genotype is given in the GT field. 
 
 Recent updates
 --------------
