@@ -18,6 +18,7 @@ that occurs because a sample is low coverage. In brief, a number of reads at a s
 is drawn from a Poisson distribution (--coverage) and a singular error rate (in Phred quality score units, --quality) is further assumed. The true genotype from the simulation, along w/ the number of reads and base qualities, is transformed into the observed genotype using the simplistic likelihood estimator of Angsd (the original GATK model described [here](http://www.popgen.dk/angsd/index.php/Genotype_Likelihoods) ). The original genotype is maintained (added tag, OG) and the simulated observed genotype is given in the GT field. 
 
 <br>
+
 TODO:
 * X chromosome (the calling is functional but incorrect for males on the X)
 * Applying changes to a single individual
