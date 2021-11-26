@@ -14,7 +14,7 @@ In this fork a genomic error model is added. See flags:
 
 The error model is solely concerned with the genotyping error
 that occurs because a sample is low coverage. In brief, a number of reads at a site
-is drawn from a Poisson distribution (--coverage) and a singular error rate (in Phred quality score units, --quality) is further assumed. The true genotype from the simulation, along w/ the number of reads and base qualities, is transformed into the observed genotype using the simplistic likelihood estimator of Angsd. The original genotype is maintained (added tag, OG) and the simulated observed genotype is given in the GT field. 
+is drawn from a Poisson distribution (--coverage) and a singular error rate (in Phred quality score units, --quality) is further assumed. The true genotype from the simulation, along w/ the number of reads and base qualities, is transformed into the observed genotype using the simplistic likelihood estimator of Angsd (the original GATK model described [here](http://www.popgen.dk/angsd/index.php/Genotype_Likelihoods) ). The original genotype is maintained (added tag, OG) and the simulated observed genotype is given in the GT field. 
 
 Recent updates
 --------------
