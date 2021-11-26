@@ -2,6 +2,7 @@
 //
 // This program is distributed under the terms of the GNU General Public License
 
+#include <cstdio>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,19 +26,22 @@ int main(int argc, char **argv) {
   if (!success)
     return -1;
 
-  // +13 for -everyone.fam, + 1 for \0
-  int outFileLen = strlen(CmdLineOpts::outPrefix)+ 13 + 1;
+  // +13 for -everyone.fam, + 1 for \0 // +5 because we want to make - into stdout
+  int outFileLen = strlen(CmdLineOpts::outPrefix) + 5 + 13 + 1;
   char *outFile = new char[outFileLen];
   if (outFile == NULL) {
-    printf("ERROR: out of memory");
+    fprintf(stderr, "ERROR: out of memory");
     exit(5);
   }
 
   // open the log file
   sprintf(outFile, "%s.log", CmdLineOpts::outPrefix);
+  if (CmdLineOpts::outPrefix[0] == '-' && CmdLineOpts::outPrefix[1] == 0)
+    sprintf(outFile, "stdout.log");
+  
   FILE *log = fopen(outFile, "w");
   if (!log) {
-    printf("ERROR: could not open log file %s!\n", outFile);
+    fprintf(stderr, "ERROR: could not open log file %s!\n", outFile);
     perror("open");
     exit(1);
   }
@@ -54,8 +58,8 @@ int main(int argc, char **argv) {
     }
   }
   randomGen.seed(CmdLineOpts::randSeed);
-
-  FILE *outs[2] = { stdout, log };
+  // changed from stdout (sorry, but this makes streaming the VCF to stdout feasible)
+  FILE *outs[2] = { stderr, log };
 
   for(int o = 0; o < 2; o++) {
     fprintf(outs[o], "Pedigree simulator!  v%s    (Released %s)\n\n",
@@ -193,6 +197,10 @@ int main(int argc, char **argv) {
       fflush(outs[o]);
     }
     sprintf(outFile, "%s.bp", CmdLineOpts::outPrefix);
+    if (CmdLineOpts::outPrefix[0] == '-' && CmdLineOpts::outPrefix[1] == 0)
+      sprintf(outFile, "stdout.bp");
+
+    
     printBPs(simDetails, theSamples, map, /*bpFile=*/ outFile);
     for(int o = 0; o < 2; o++) {
       fprintf(outs[o], "done.\n");
@@ -208,6 +216,9 @@ int main(int argc, char **argv) {
     fflush(outs[o]);
   }
   sprintf(outFile, "%s.seg", CmdLineOpts::outPrefix);
+  if (CmdLineOpts::outPrefix[0] == '-' && CmdLineOpts::outPrefix[1] == 0)
+    sprintf(outFile, "stdout.seg");
+  
   char *mrcaFile = NULL;
   if (CmdLineOpts::printMRCA) {
     mrcaFile = new char[outFileLen];
@@ -216,6 +227,8 @@ int main(int argc, char **argv) {
       exit(5);
     }
     sprintf(mrcaFile, "%s.mrca", CmdLineOpts::outPrefix);
+    if (CmdLineOpts::outPrefix[0] == '-' && CmdLineOpts::outPrefix[1] == 0)
+      sprintf(mrcaFile, "stdout.mrca");
   }
   locatePrintIBD(simDetails, hapCarriers, map, sexSpecificMaps,
 		 /*ibdFile=*/ outFile, /*ibdSegs=print them only=*/ NULL,
@@ -229,6 +242,9 @@ int main(int argc, char **argv) {
       fprintf(outs[o], "Printing fam file... ");
     fflush(stdout);
     sprintf(outFile, "%s-everyone.fam", CmdLineOpts::outPrefix);
+    if (CmdLineOpts::outPrefix[0] == '-' && CmdLineOpts::outPrefix[1] == 0)
+      sprintf(outFile, "stdout-everyone.fam");
+    
     printFam(simDetails, theSamples, /*famFile=*/ outFile);
     for(int o = 0; o < 2; o++)
       fprintf(outs[o], "done.  (Do not use with PLINK data: see README.md)\n");

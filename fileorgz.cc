@@ -25,6 +25,12 @@ bool FileOrGZ<FILE *>::open(const char *filename, const char *mode) {
   // First allocate a buffer for I/O:
   alloc_buf();
 
+  // unix convention; - == stdout
+  if (filename[0] == '-' && filename[1] == 0) {
+    fp = stdout;
+    return true;
+  }
+  
   fp = fopen(filename, mode);
   if (!fp)
     return false;
@@ -151,6 +157,10 @@ int FileOrGZ<gzFile>::printf(const char *format, ...) {
 template<>
 int FileOrGZ<FILE *>::close() {
   assert(buf_len == 0);
+
+  // finish the abstraction. don't close stdout. return 0 (success in the eyes of fclose)
+  if (fp == stdout)
+    return 0;
   // should free buf, but I know the program is about to end, so won't
   return fclose(fp);
 }

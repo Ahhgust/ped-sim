@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <stdio.h>
 #include <iostream>
+#include <cstdio>
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
@@ -183,21 +184,36 @@ int printVCF(vector<SimDetails> &simDetails, Person *****theSamples,
   int inVCFlen = strlen(inVCFfile);
   if (strcmp(&CmdLineOpts::inVCFfile[ inVCFlen - 3 ], ".gz") == 0) {
     if (CmdLineOpts::nogz) {
-      sprintf(outFile, "%s.vcf", CmdLineOpts::outPrefix);
+
+      if (CmdLineOpts::outPrefix[0] == '-' && CmdLineOpts::outPrefix[1] == 0)
+        sprintf(outFile, "-");
+      else
+        sprintf(outFile, "%s.vcf", CmdLineOpts::outPrefix);
+        
       return makeVCF<gzFile, FILE *>(simDetails, theSamples, totalFounderHaps,
 				     CmdLineOpts::inVCFfile,
 				     /*outVCFfile=*/ outFile, map, outs,
 				     hapNumsBySex, sexes);
     }
     else {
-      sprintf(outFile, "%s.vcf.gz", CmdLineOpts::outPrefix);
+
+      if (CmdLineOpts::outPrefix[0] == '-' && CmdLineOpts::outPrefix[1] == 0) 
+        sprintf(outFile, "-");
+      else
+        sprintf(outFile, "%s.vcf.gz", CmdLineOpts::outPrefix);
+        
       return makeVCF<gzFile, gzFile>(simDetails, theSamples, totalFounderHaps,
 				     CmdLineOpts::inVCFfile,
 				     /*outVCFfile=*/ outFile, map, outs,
 				     hapNumsBySex, sexes);
     }
-  }
-  else {
+  } else if (CmdLineOpts::outPrefix[0] == '-' && CmdLineOpts::outPrefix[1] == 0) {
+    sprintf(outFile, "-");
+    return makeVCF<FILE *, FILE *>(simDetails, theSamples, totalFounderHaps,
+                                   CmdLineOpts::inVCFfile,
+                                   /*outVCFfile=*/ outFile, map, outs,
+                                   hapNumsBySex, sexes);
+  } else {
     sprintf(outFile, "%s.vcf", CmdLineOpts::outPrefix);
     return makeVCF<FILE *, FILE *>(simDetails, theSamples, totalFounderHaps,
 				   CmdLineOpts::inVCFfile,
@@ -227,10 +243,11 @@ int makeVCF(vector<SimDetails> &simDetails, Person *****theSamples,
 
   // open output VCF file:
   FileOrGZ<O_TYPE> out;
+  
   success = out.open(outFileBuf, "w");
   if (!success) {
     fprintf(stderr, "\nERROR: could not open output VCF file %s!\n",
-	    outFileBuf);
+            outFileBuf);
     perror("open");
     exit(1);
   }
@@ -376,6 +393,9 @@ int makeVCF(vector<SimDetails> &simDetails, Person *****theSamples,
       FILE *idOut = NULL;
       if (CmdLineOpts::printFounderIds) {
         sprintf(outFileBuf, "%s.ids", CmdLineOpts::outPrefix);
+        if (CmdLineOpts::outPrefix[0] == '-' && CmdLineOpts::outPrefix[1] == 0)
+          sprintf(outFileBuf, "stdout.ids");
+        
         idOut = fopen(outFileBuf, "w");
         if (!idOut) {
           fprintf(stderr, "ERROR: could not open found ids file %s!\n",
@@ -922,9 +942,11 @@ int makeVCF(vector<SimDetails> &simDetails, Person *****theSamples,
         numHaps = 1;
       for(int h = 0; h < numHaps; h++) {
         out.printf("%c%s", betweenAlleles[h], hapAlleles[ 2*sampIdx + h ]);
-        if (CmdLineOpts::coverage >= 0.0 && numAlleles==2) // print out missing data for the  annotations specific to simulated individuals...
-          out.printf(":.:.:.");    
       }
+      
+      if (CmdLineOpts::coverage >= 0.0 && numAlleles==2) // print out missing data for the  annotations specific to simulated individuals...
+        out.printf(":.:.:.");    
+
     }
     
     out.printf("\n");
